@@ -324,6 +324,24 @@ Two things to know about the free tier:
 
 If `env.ts` rejects the config the process exits with the failing field named in the Render log. Read that log before debugging anything else.
 
+#### Two failures that do not announce themselves
+
+Verified by booting `node dist/server.js` with only those four variables and nothing else — which is exactly what a Render checkout looks like, since `.env` is gitignored:
+
+```
+MongoDB connected → …mongodb.net/doctor_tracker
+Indexes synchronised in 694ms
+Doctor Tracker API → http://localhost:1000/api/v1 (production)
+
+Set-Cookie: dt_at=…; Max-Age=900;     Path=/;             HttpOnly; Secure; SameSite=Lax
+Set-Cookie: dt_rt=…; Max-Age=604800;  Path=/api/v1/auth;  HttpOnly; Secure; SameSite=Lax
+```
+
+- **The database name is the URI path.** `/doctor_tracker` is part of the connection string, not application config. Paste a URI without it and Mongoose quietly defaults to a database called `test`: the service boots, health check passes, and every list renders empty. That reads like a seeding failure, not a typo.
+- **`COOKIE_SECURE` in a copied `.env` overrides the production default.** The app derives `secure` from `NODE_ENV=production` when the variable is absent — but dotenv only fills in what the platform left unset, so a stale `COOKIE_SECURE=false` carried over from local wins, and the session cookies lose `Secure` with no log line at all. Leave the variable alone on Render.
+
+Both legs of the auth surface behave the same as in development on that boot: `401` on an unauthenticated `/doctors`, `200` with cookies, identical `Invalid email or password` for a wrong password and an unknown account, `400` with field details for a malformed body, and `POST /auth/refresh` minting a fresh pair from the refresh cookie alone.
+
 ### 2 — Seed the production database
 
 The demo register (admin user + 45 doctors / 600 patients) has to be written to the Atlas cluster once:
