@@ -319,7 +319,7 @@ JWT_REFRESH_SECRET=<the same command, run again — must be a DIFFERENT value>
 
 Two things to know about the free tier:
 
-- **Atlas must accept Render's traffic.** Free Render services have *dynamic* egress IPs, so you cannot allowlist one. Either set the Atlas Network Access entry to `0.0.0.0/0` — which is safe only in the sense that the connection string is still the secret, and unsafe in every other sense — or move to a Render instance with a static IP and allowlist just that. Say which you chose before anyone clones this.
+- **Atlas must accept Render's traffic.** Free Render services have *dynamic* egress IPs, so no single address can be allowlisted — this cluster carries a `0.0.0.0/0` entry commented `Render + Vercel` for exactly that reason. It is the pragmatic free-tier choice and it is worth naming out loud in a review rather than hiding: the database user's credentials become the only gate, and the data behind them is synthetic. See step 2.
 - **Free instances sleep after ~15 minutes idle** and the first request after that pays a cold start of up to a minute. `/health` exists for exactly this: it does no database work and no auth, so a keep-warm ping is cheap. Whether you ping it is a tradeoff with the free tier's spin-down behaviour, not a correctness requirement — the app works either way, it just answers slowly after a gap.
 
 If `env.ts` rejects the config the process exits with the failing field named in the Render log. Read that log before debugging anything else.
@@ -344,18 +344,24 @@ Set-Cookie: dt_rt=…; Max-Age=604800;  Path=/api/v1/auth;  HttpOnly; Secure; Sa
 
 Both legs of the auth surface behave the same as in development on that boot: `401` on an unauthenticated `/doctors`, `200` with cookies, identical `Invalid email or password` for a wrong password and an unknown account, `400` with field details for a malformed body, and `POST /auth/refresh` minting a fresh pair from the refresh cookie alone.
 
-### 2 — Seed the production database
+### 2 — The database: do not re-seed it
 
-The demo register (admin user + 45 doctors / 600 patients) has to be written to the Atlas cluster once:
+The deployed API points at the **same Atlas cluster and the same `doctor_tracker` database** that local development uses, so the register is already populated — 45 doctors, 600 patients, one admin user. There is nothing to migrate and nothing to seed.
+
+`npm run seed` **drops the database before reseeding it.** Against the deployed URI that is not a reset, it is a wipe of everything the portal is showing. Only reach for it if you have deliberately pointed the service at a different database name, and then pass the seed knobs explicitly:
 
 ```bash
-cd doctor-tracker-api
-MONGO_URI="the atlas uri" npm run seed
+MONGO_URI="mongodb+srv://…/a_different_database?…" npm run seed
 ```
 
-That is the practical free-tier path — run it from your machine with your own IP allowlisted in Atlas. Render's Shell Session runs `npm run seed:prod` against the built output instead, but Shell Sessions are a paid feature.
+Network Access on this cluster is already open to `0.0.0.0/0` (comment `Render + Vercel`) because Render's free tier has dynamic egress IPs and no single address can be allowlisted. That is the pragmatic free-tier choice, not a recommendation: the database user's credentials are then the only gate, and the data in it is synthetic. A paid Render instance with a static outbound IP would allowlist as a `/32` instead.
 
-The seeded `admin@doctortracker.dev / Admin@1234` is now a *live* credential. Change it — `ADMIN_EMAIL` / `ADMIN_PASSWORD` on a re-run, or one `updateOne` in Atlas — before sharing the link.
+The seeded `admin@doctortracker.dev / Admin@1234` is a published credential — it appears in this README and in `.env.example`. Change it in the live database before sharing the link:
+
+```js
+// Atlas ▸ Data Browse ▸ doctor_tracker  users ▸ update the admin doc's password
+// with a fresh bcrypt hash, or re-run the seed against a throwaway database.
+```
 
 ### 3 — Vercel (web)
 
