@@ -1,26 +1,174 @@
 @import "tailwindcss";
 
+/*
+ * One set of semantic tokens, resolved per colour scheme. Components only ever
+ * reference `--color-*` names, so a dark mode is this block plus nothing else.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --canvas: #f6f7fb;
+  --surface: #ffffff;
+  --surface-muted: #f9fafc;
+  --line: #e4e7ee;
+  --line-strong: #cfd5e0;
+  --ink: #101728;
+  --ink-muted: #5b6678;
+  --ink-faint: #8a94a6;
+  --brand: #2f5fe0;
+  --brand-hover: #244fc0;
+  --brand-soft: #eaf0ff;
+  --danger: #c8334b;
+  --danger-soft: #fdeaee;
+  --warning: #a2650b;
+  --warning-soft: #fdf3e0;
+  --success: #1c7a53;
+  --success-soft: #e6f6ee;
+  --info: #2a6c8f;
+  --info-soft: #e7f2f8;
+  --ring: rgb(47 95 224 / 0.45);
+  --shadow-card: 0 1px 2px rgb(16 23 40 / 0.04), 0 8px 24px -12px rgb(16 23 40 / 0.12);
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --canvas: #0c1017;
+    --surface: #141a24;
+    --surface-muted: #1a212c;
+    --line: #252e3b;
+    --line-strong: #33404f;
+    --ink: #e8ecf3;
+    --ink-muted: #a3aec0;
+    --ink-faint: #75829a;
+    --brand: #6d94f5;
+    --brand-hover: #82a5f8;
+    --brand-soft: #1b2540;
+    --danger: #f0788c;
+    --danger-soft: #2c1a20;
+    --warning: #e0b062;
+    --warning-soft: #2b2317;
+    --success: #5cc798;
+    --success-soft: #14291f;
+    --info: #74b6d8;
+    --info-soft: #142630;
+    --ring: rgb(109 148 245 / 0.5);
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -12px rgb(0 0 0 / 0.5);
+    color-scheme: dark;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-soft: var(--brand-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --radius-card: 14px;
+  --shadow-card: var(--shadow-card);
+}
+
+@layer base {
+  * {
+    border-color: var(--line);
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  /* Number inputs used for age/experience: the spinners overlap the field padding. */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    appearance: none;
+    margin: 0;
+  }
+}
+
+@layer components {
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+  }
+
+  .field {
+    width: 100%;
+    border-radius: 9px;
+    border: 1px solid var(--line-strong);
+    background: var(--surface);
+    padding: 0.5rem 0.7rem;
+    font-size: 0.875rem;
+    line-height: 1.35rem;
+    color: var(--ink);
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+  }
+
+  .field:hover:not(:disabled) {
+    border-color: var(--ink-faint);
+  }
+
+  .field:focus {
+    outline: none;
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px var(--ring);
+  }
+
+  .field::placeholder {
+    color: var(--ink-faint);
+  }
+
+  .field:disabled {
+    background: var(--surface-muted);
+    color: var(--ink-faint);
+    cursor: not-allowed;
+  }
+
+  .field-invalid {
+    border-color: var(--danger);
+  }
+
+  .field-invalid:focus {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 3px rgb(200 51 75 / 0.35);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
