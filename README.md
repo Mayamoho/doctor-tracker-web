@@ -32,7 +32,7 @@ git clone https://github.com/Mayamoho/doctor-tracker-api.git
 
 | | |
 |---|---|
-| Node.js | `>= 20.19` (declared in the API's `engines`; the client runs on the same runtime) |
+| Node.js | `>= 20.19` — declared in both repos' `engines` (Next 16 itself asks for `>=20.9`; this is what everything was verified on) |
 | MongoDB | An Atlas cluster URI, or any reachable `mongodb://` deployment |
 | Package manager | npm |
 
@@ -84,6 +84,8 @@ cd doctor-tracker-web  && npm run build && npm start
 ```
 
 Set `API_INTERNAL_URL` to the API's private origin. The browser never sees that host: every call goes to the web origin and is rewritten (see below), which is what keeps the cookies first-party.
+
+To put the pair on the internet instead of `localhost` — Render for the API, Vercel for the portal, with the exact variables and the cookie consequence — see [Deployment](#deployment).
 
 ---
 
@@ -275,6 +277,105 @@ Captured from a production build (`next build && next start`) at 1440×900 and 3
 | ![m Drawer](docs/screenshots/mobile-nav-drawer.png) | **Navigation.** The persistent sidebar becomes a drawer with a scrim. |
 | ![m Form](docs/screenshots/mobile-patient-form.png) | **Add patient.** Single-column form in a dialog sized to the viewport. |
 | ![m Detail](docs/screenshots/mobile-doctor-detail.png) | **Doctor detail.** Facts, then that doctor's patients. |
+
+---
+
+## Deployment
+
+Two services, because the spec asks for a standalone Express backend rather than a full-stack Next app:
+
+| | | |
+|---|---|---|
+| `doctor-tracker-api` | **Render** — free `Web Service` | Reachable HTTPS origin for the rewrite to point at. |
+| `doctor-tracker-web` | **Vercel** — free `Hobby` | The origin the browser actually sees. |
+| Database | **MongoDB Atlas** — free `M0` | Already the development database; nothing to migrate. |
+
+Deploy the API first — the web service needs its URL at build time.
+
+### 1 — Render (API)
+
+New ▸ Web Service ▸ connect `Mayamoho/doctor-tracker-api` ▸ branch `main`.
+
+| Field | Value |
+|---|---|
+| Runtime | Node (Render reads `engines.node: ">=20.19"` from `package.json`) |
+| Build command | `npm ci && npm run build` |
+| Start command | `npm start` → `node dist/server.js` |
+| Health check path | `/health` |
+| Instance type | Free |
+
+Environment variables — set these in the Render dashboard, never in a committed file:
+
+```
+NODE_ENV=production
+MONGO_URI=mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/doctor_tracker?retryWrites=true&w=majority
+JWT_ACCESS_SECRET=<node -e "console.log(require('crypto').randomBytes(48).toString('hex'))">
+JWT_REFRESH_SECRET=<the same command, run again — must be a DIFFERENT value>
+```
+
+`src/config/env.ts` enforces a 32-character minimum on both secrets and exits the process on anything less, so a placeholder that survives copy-paste fails loudly at boot rather than silently minting unverifiable tokens.
+
+`PORT` is already an environment variable on Render (`1000`) and `src/config/env.ts` reads it — do not set one. `CLIENT_ORIGIN` and `COOKIE_SECURE` are both unnecessary here: the portal reaches the API through a same-origin rewrite, and `cookieSecure` defaults to `true` under `NODE_ENV=production`.
+
+Two things to know about the free tier:
+
+- **Atlas must accept Render's traffic.** Free Render services have *dynamic* egress IPs, so you cannot allowlist one. Either set the Atlas Network Access entry to `0.0.0.0/0` — which is safe only in the sense that the connection string is still the secret, and unsafe in every other sense — or move to a Render instance with a static IP and allowlist just that. Say which you chose before anyone clones this.
+- **Free instances sleep after ~15 minutes idle** and the first request after that pays a cold start of up to a minute. `/health` exists for exactly this: it does no database work and no auth, so a keep-warm ping is cheap. Whether you ping it is a tradeoff with the free tier's spin-down behaviour, not a correctness requirement — the app works either way, it just answers slowly after a gap.
+
+If `env.ts` rejects the config the process exits with the failing field named in the Render log. Read that log before debugging anything else.
+
+### 2 — Seed the production database
+
+The demo register (admin user + 45 doctors / 600 patients) has to be written to the Atlas cluster once:
+
+```bash
+cd doctor-tracker-api
+MONGO_URI="the atlas uri" npm run seed
+```
+
+That is the practical free-tier path — run it from your machine with your own IP allowlisted in Atlas. Render's Shell Session runs `npm run seed:prod` against the built output instead, but Shell Sessions are a paid feature.
+
+The seeded `admin@doctortracker.dev / Admin@1234` is now a *live* credential. Change it — `ADMIN_EMAIL` / `ADMIN_PASSWORD` on a re-run, or one `updateOne` in Atlas — before sharing the link.
+
+### 3 — Vercel (web)
+
+Import `Mayamoho/doctor-tracker-web` ▸ branch `main`. Framework autodetects Next.js; leave build and output settings at their defaults.
+
+One environment variable:
+
+```
+API_INTERNAL_URL=https://<your-service>.onrender.com
+```
+
+`engines.node` in `package.json` pins the build image to the same runtime the app was verified on.
+
+Rewrites are resolved when Next builds, not per request — so `API_INTERNAL_URL` is baked into the deploy. Create the Render service first, paste its URL here, and expect to redeploy once if you get it wrong.
+
+### 4 — Why this topology, and the one thing that breaks it
+
+`next.config.ts` rewrites `/api/v1/:path*` to `API_INTERNAL_URL`. The browser therefore only ever talks to the Vercel origin; Next proxies to Render server-side and passes the `Set-Cookie` headers back through. That is what makes the auth cookies first-party:
+
+- They are **host-only** — `src/utils/cookies.ts` deliberately sets no `Domain`. Adding one breaks the whole scheme, because the host the browser sees (`*.vercel.app`) is not a suffix of the Render host, and a `Domain` attribute that does not match is dropped.
+- They are **`SameSite=Lax`**, which is the only setting Safari's ITP does not block outright. Cross-site `SameSite=None` cookies — the usual reflex when two services live on different domains — would silently never be stored here, and login would appear to succeed while every subsequent request was unauthenticated.
+
+Consequences to keep in mind:
+
+- **`SameSite=Lax` means the API is only reachable through the rewrite.** A cross-origin `fetch` from the Render host would send no cookies — Lax attaches them to top-level GET navigations only. That is intended: CORS is configured for local development, when the portal is on another port and you may want to hit `:5000` directly.
+- **The proxy passthrough is not theoretical.** The verification pass drove this exact topology locally — portal on `:3100` rewriting `/api/v1/*` to the API on `:5000` — through login, refresh, protected reads and logout, with the cookies surviving as host-only first-party cookies. Render + Vercel is the same shape across two hosts instead of two ports.
+- **Both legs must be HTTPS.** Vercel and Render both terminate TLS upstream; `app.set('trust proxy', 1)` exists so `req.ip` is still the real client behind exactly one hop — a permissive `true` there would let any caller spoof past the rate limiter.
+- **The gate on the portal is cookie presence, not validity** (`proxy.ts`). Rendering `/dashboard` unauthenticated costs one round trip before the API returns 401 and the client redirects.
+
+### 5 — Verify the deployed pair
+
+| Check | Expected |
+|---|---|
+| `GET https://<render>/health` | `{"success":true,"data":{"status":"ok","environment":"production",…}}` |
+| `GET https://<vercel>/login` | The portal sign-in screen, no console errors |
+| `POST https://<vercel>/api/v1/auth/login` | `200`, and **two `Set-Cookie` headers** (`dt_at`, `dt_rt`) scoped to the Vercel host |
+| Wrong password | `401` with the same message as an unknown account |
+| Dashboard, doctors, patients | Data renders; charts animate in; reload a filtered URL and the filters come back |
+
+Paste the Vercel URL and both repository links into the submission.
 
 ---
 
