@@ -62,7 +62,7 @@ Generate the two secrets with different values:
 node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
 
-`.env.example` documents every variable — server port, `MONGO_URI`, the access/refresh secret pair and their TTLs, `CLIENT_ORIGIN`/`COOKIE_SECURE` for the direct-origin case, and the seed knobs (`SEED_DOCTORS`, `SEED_PATIENTS`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`).
+`.env.example` documents every variable — server port, `MONGO_URI`, the access/refresh secret pair and their TTLs, `CLIENT_ORIGIN`/`COOKIE_SECURE` for the direct-origin case, and the seed knobs (`SEED_PATIENTS`, `SEED_CONFIRM_DB`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`).
 
 ### 2 — Web
 
@@ -160,6 +160,8 @@ src/
 ```
 
 `proxy.ts` is deliberately coarse: it checks that a session cookie *exists* so a signed-out visitor never sees a flashing empty dashboard. It does not verify tokens — verification belongs to the API, and duplicating JWT verification into the frontend would mean duplicating the secret into it. A tampered cookie passes the gate and is rejected by `requireAuth`.
+
+The gate reads `dt_at` or `dt_s`, and the reason it needs `dt_s` is worth stating because it is the kind of bug that only shows up after fifteen minutes. `dt_rt` is path-scoped to `/api/v1/auth` — that is what keeps a 7-day credential off every navigation and asset request — which also means the browser never attaches it to a GET of `/dashboard`. Gating on `dt_at || dt_rt` therefore means: for the first 15 minutes of a session the gate sees `dt_at` and lets you in, and after that it sees *nothing* and bounces you to `/login`, even though the client is fully capable of refreshing on a 401 and carrying on. `dt_s` is a no-credential marker with the refresh token's lifetime and `path=/`, so the gate stays quiet for exactly as long as the session can still be renewed, and `logout` clears it along with everything else.
 
 ### Where state lives
 

@@ -10,12 +10,19 @@ import { NextResponse, type NextRequest } from 'next/server';
  * It exists so an unauthenticated visitor never sees a flashing empty dashboard.
  */
 const ACCESS_COOKIE = 'dt_at';
-const REFRESH_COOKIE = 'dt_rt';
+/**
+ * The session marker, not the refresh cookie. `dt_rt` is path-scoped to
+ * `/api/v1/auth`, so it is never attached to a navigation to `/dashboard`;
+ * gating on it means a 15-minute-old access token silently logs people out at
+ * the door even though the client can refresh on a 401. `dt_s` is sent on every
+ * request to this origin and holds no credential.
+ */
+const SESSION_COOKIE = 'dt_s';
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const signedIn = Boolean(
-    request.cookies.get(ACCESS_COOKIE)?.value || request.cookies.get(REFRESH_COOKIE)?.value,
+    request.cookies.get(ACCESS_COOKIE)?.value || request.cookies.get(SESSION_COOKIE)?.value,
   );
 
   if (pathname.startsWith('/api')) return NextResponse.next();
