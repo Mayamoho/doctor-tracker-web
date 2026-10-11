@@ -108,7 +108,11 @@ export function ConditionMixChart({ data }: { data: Slices }) {
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
           <span className="text-xl font-semibold text-ink">{total.toLocaleString()}</span>
-          <span className="text-[11px] text-ink-faint">tracked</span>
+          {/* `tracked` here would read as "the register holds this many patients" —
+              the API caps this facet at the top conditions, so the number is only
+              what the ring draws. The percentages beside the legend are the same
+              subtotal, not the whole register. */}
+          <span className="text-[11px] text-ink-faint">visits shown</span>
         </div>
       </div>
 
