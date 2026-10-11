@@ -299,7 +299,7 @@ New ▸ Web Service ▸ connect `Mayamoho/doctor-tracker-api` ▸ branch `main`.
 | Field | Value |
 |---|---|
 | Runtime | Node (Render reads `engines.node: ">=20.19"` from `package.json`) |
-| Build command | `npm ci && npm run build` |
+| Build command | `npm ci --include=dev && npm run build` |
 | Start command | `npm start` → `node dist/server.js` |
 | Health check path | `/health` |
 | Instance type | Free |
@@ -316,6 +316,8 @@ JWT_REFRESH_SECRET=<the same command, run again — must be a DIFFERENT value>
 `src/config/env.ts` enforces a 32-character minimum on both secrets and exits the process on anything less, so a placeholder that survives copy-paste fails loudly at boot rather than silently minting unverifiable tokens.
 
 `PORT` is already an environment variable on Render (`1000`) and `src/config/env.ts` reads it — do not set one. `CLIENT_ORIGIN` and `COOKIE_SECURE` are both unnecessary here: the portal reaches the API through a same-origin rewrite, and `cookieSecure` defaults to `true` under `NODE_ENV=production`.
+
+**The `--include=dev` in the build command is load-bearing, not decoration.** Render exports `NODE_ENV=production` for Node services, and npm responds by setting `omit=dev` — so a plain `npm ci` installs no devDependencies, `typescript` is among them, and `npm run build` dies with `sh: 1: tsc: not found` after a perfectly healthy-looking install. `npm config get omit` returns `dev` under that `NODE_ENV` and empty otherwise; that is the whole failure.
 
 Two things to know about the free tier:
 
