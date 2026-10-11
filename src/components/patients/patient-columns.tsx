@@ -14,7 +14,7 @@ export function patientColumns({ withDoctor }: { withDoctor: boolean }): Column<
     {
       key: 'name',
       header: 'Patient',
-      width: 'w-[22%]',
+      width: 'max-w-[16rem]',
       cell: (row) => (
         <div className="flex min-w-0 flex-col">
           <span className="truncate font-medium text-ink">{row.name}</span>

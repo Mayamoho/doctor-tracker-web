@@ -76,7 +76,7 @@ export interface DateRangeProps {
 
 export function DateRange({ from, to, onChange, label = 'Created' }: DateRangeProps) {
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex flex-wrap items-center gap-1.5">
       <span className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{label}</span>
       <input
         type="date"

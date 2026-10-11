@@ -27,7 +27,9 @@ export function StatCard({ label, value, hint, icon, tone = 'brand' }: StatCardP
         <p className="mt-0.5 text-[22px] font-semibold leading-tight tracking-tight text-ink tabular-nums">
           {value}
         </p>
-        {hint ? <p className="mt-0.5 truncate text-[11px] text-ink-muted">{hint}</p> : null}
+        {/* Wraps rather than truncates: two-up on a phone, "Since Monday, UTC" loses
+            the half that tells you which Monday it means. */}
+        {hint ? <p className="mt-0.5 text-[11px] leading-snug text-ink-muted">{hint}</p> : null}
       </div>
     </div>
   );
