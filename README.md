@@ -44,7 +44,7 @@ git clone https://github.com/Mayamoho/doctor-tracker-api.git
 cd doctor-tracker-api
 cp .env.example .env        # then fill in MONGO_URI and the two JWT secrets
 npm install
-npm run seed                # creates the admin user + 45 doctors / 600 patients
+npm run seed                # creates the admin user + 72 real doctors / 600 synthetic patients
 npm run dev                 # http://127.0.0.1:5000/api/v1
 ```
 
@@ -129,7 +129,7 @@ To put the pair on the internet instead of `localhost` — Render for the API, V
 | `GET` `POST` | `/api/v1/doctors` | search / filter / sort / paginate · create |
 | `GET` `PATCH` `DELETE` | `/api/v1/doctors/:id` | read · update · delete (cascades patients) |
 | `GET` `POST` | `/api/v1/doctors/:id/patients` | that doctor's patients · add one to them |
-| `DELETE` | `/api/v1/doctors/:id/patients/:patientId` | unassign / remove |
+| `DELETE` | `/api/v1/doctors/:id/patients/:patientId` | remove one patient from that doctor's list (deletes the record; the guard rejects it if the patient belongs to someone else) |
 | `GET` `POST` | `/api/v1/patients` | register-wide list (condition, gender, severity, visit-date range) · create |
 | `GET` `PATCH` `DELETE` | `/api/v1/patients/:id` | read · update · delete |
 | `GET` | `/api/v1/dashboard/stats` · `/filter-options` | `$facet` aggregates · dropdown vocabularies |
@@ -156,6 +156,31 @@ src/
 ### Where state lives
 
 Server state is TanStack Query's cache, keyed in `lib/api/query-keys.ts`; a mutation invalidates the keys it dirties (`use-invalidate.ts`) and `keepPreviousData` keeps the table still while the next page loads. List state — page, sort, search, every filter, both dates — is encoded in the URL by `lib/list-state.ts` and decoded back into query parameters. Component state is reserved for what genuinely cannot be shared: the draft inside a form, which modal is open, the debounce timer.
+
+---
+
+## Where the data comes from
+
+The register on the deployed portal is two different kinds of row, and the distinction is the most important thing to understand before reading any of the screenshots.
+
+**72 doctors are real.** `doctor-tracker-api/src/data/doctorDirectory.ts` holds one record per doctor — name, degrees, BMDC registration number, specialization, institution, district — copied from two public Bangladeshi doctor directories, with `source` recorded on every row. Only records where all six fields were published were carried over. Normalisations are mechanical and listed in that file's header comment: BMDC numbers spaced to `A-36364`, district spellings brought to the official forms (Chittagong → Chattogram, Bogra → Bogura, Jessore → Jashore), trailing designations stripped out of degree strings, and mixed-script rows dropped rather than transliterated by hand.
+
+**Their phone numbers and emails are not.** Both sites publish chamber numbers. Re-listing them on a demo register would route cold calls at named, licensed people, and substituting invented numbers would put false data under real names — so the seed stores the literal string `not published`, which is kept out of the search index, rendered as a muted em dash in the table, shown as "Not published" on the profile, and treated as blank by the edit form so saving a doctor never overwrites a real contact with the marker.
+
+**600 patients are synthetic, and no honest alternative exists.** A patient record is personal data by definition; there is no public Bangladeshi dataset of them. The service the brief's example links to is a commercial records platform, not open data. So the identities are generated, and the portal says so in the sidebar of every page.
+
+What *is* real is the clinical frame those identities sit in, because that part is published:
+
+| | source |
+|---|---|
+| District names and their divisions | DGHS/HRIS facility registry (34 districts, official spellings) |
+| Condition names and ICD-10 codes | WHO ICD-10, restricted per specialty to what that clinic actually sees |
+| Seasonal visit curve per condition | the published monsoon/dengue and winter/ARI burden shape, as an approximation |
+| Home district in `notes` | 66% of a doctor's patients live in that doctor's own district, the rest in the same division |
+
+`experienceYears` is the one doctor field that is estimated rather than copied. BMDC registration numbers are issued in registration order, so the seeded set is ranked by number and mapped onto a career span — internally consistent seniority, and no number claimed that a directory did not print.
+
+**The consequence worth stating plainly:** synthetic patients sit under real doctors on a public URL. Every such row carries an ICD-10 code and a home district in its notes, the sidebar labels the dataset on every screen, and no contact detail or address is attached to any named person.
 
 ---
 
@@ -195,16 +220,29 @@ Digits are rejoined rather than split, because a phone typed with spaces or a `+
 
 One consequence is documented rather than hidden: because only the last token is searched, pasting a complete email address searches `com` and returns the register. Searching the local part — `parvinanam60` — returns exactly the one doctor. Specialization and hospital are also deliberately *not* in the free-text index; they have dropdowns, and folding them in would make a search for `Dr` return everything.
 
-Filter and sort get the same treatment as search: every path the UI can take has a compound index whose field order matches the query, so the sort is free rather than an in-memory pass —
+Filter and sort get the same treatment, with one boundary stated honestly. Every *filter* the UI exposes is served by a compound index whose key order matches the query's sort, so paging is index-ordered and `keys == docs == returned`:
 
 ```
-IXSCAN  doctor list — specialization filter + default sort + page 1
-          index: specialization_1_createdAt_-1__id_-1   keys=7 docs=7
-IXSCAN  patient list — one doctor, newest visit first
-          index: doctorId_1_visitDate_-1__id_-1         keys=10 docs=10
+IXSCAN  doctor list — specialization "Cardiology" + default sort + page 1
+          index: specialization_1_createdAt_-1__id_-1   keys=9 docs=9 returned=9
+IXSCAN  patient list — gender "female" filter + newest first
+          index: gender_1_createdAt_-1__id_-1           keys=10 docs=10 returned=10
+IXSCAN  patient list — one doctor, newest visit first (the service's aggregation)
+          index: doctorId_1_visitDate_-1__id_-1         keys=10 docs=10 returned=10
+IXSCAN  doctor list — most experienced first
+          index: experienceYears_-1__id_-1              keys=10 docs=10 returned=10
 ```
 
-*(The seeded corpus is 45 doctors and 600 patients, so every `millis` above is 0. The signal is keys and documents scanned, not latency.)*
+A *free-text search combined with a sort* is the exception, and it is a property of MongoDB rather than of this schema: `searchTerms` is multikey, and a multikey index cannot provide a sort order, so the planner returns the matched documents and sorts them in memory —
+
+```
+IXSCAN  doctor search + newest-first page          + blocking sort
+          index: searchTerms_1                    keys=5 docs=4 returned=4
+```
+
+That is the right trade at this size: the sort input is the number of doctors that matched (single digits), not the size of the collection. Covering it would mean one compound index per searchable field per sort order, which is a larger and slower write path to save a sort over four documents.
+
+*(The seeded corpus is 72 doctors and 600 patients, so every `millis` above is 0. The signal is keys and documents scanned, not latency. `npm run indexes` regenerates this report, including the two deliberately-bad queries it compares against: the same term unanchored reads 593 keys instead of 5, and `name: { $regex: '^khan', $options: 'i' }` reads the whole index and returns nothing, because the stored names start with `Dr.`.)*
 
 ### 2 · TanStack Query over Redux, and the URL over both
 
@@ -263,7 +301,7 @@ Captured from a production build (`next build && next start`) at 1440×900 and 3
 |---|---|
 | ![Sign-in](docs/screenshots/desktop-login.png) | **Sign-in.** The only unauthenticated screen; a session cookie redirects away from it. |
 | ![Dashboard](docs/screenshots/desktop-dashboard.png) | **Dashboard.** Four counters, twelve-month visit area, top-eight doctors by patients, department distribution, case-mix donut. |
-| ![Doctors](docs/screenshots/desktop-doctors.png) | **Doctor register.** Ten per page over 45 rows, with search, three filters, a date range and a server-whitelisted sort in one toolbar. |
+| ![Doctors](docs/screenshots/desktop-doctors.png) | **Doctor register.** Ten per page over 72 rows, with search, three filters, a date range and a server-whitelisted sort in one toolbar. |
 | ![Filtered](docs/screenshots/desktop-doctors-search.png) | **Search applied.** The query is in the URL, so the screen is a link — and a reload or a back gesture lands on the same rows. |
 | ![Detail](docs/screenshots/desktop-doctor-detail.png) | **Doctor detail.** Facts for the record, and that doctor's own patient list — paginated, filterable, with add and remove scoped to them. |
 | ![Patients](docs/screenshots/desktop-patients.png) | **Patient register.** 600 rows across 60 pages, with the doctor column the per-doctor view omits and filters on condition, gender and severity. |
@@ -323,7 +361,7 @@ JWT_REFRESH_SECRET=<the same command, run again — must be a DIFFERENT value>
 
 Two things to know about the free tier:
 
-- **Atlas must accept Render's traffic.** Free Render services have *dynamic* egress IPs, so no single address can be allowlisted — this cluster carries a `0.0.0.0/0` entry commented `Render + Vercel` for exactly that reason. It is the pragmatic free-tier choice and it is worth naming out loud in a review rather than hiding: the database user's credentials become the only gate, and the data behind them is synthetic. See step 2.
+- **Atlas must accept Render's traffic.** Free Render services have *dynamic* egress IPs, so no single address can be allowlisted — this cluster carries a `0.0.0.0/0` entry commented `Render + Vercel` for exactly that reason. It is the pragmatic free-tier choice and it is worth naming out loud in a review rather than hiding: the database user's credentials become the only gate, and the data behind them is a demo register — real doctor identities with their contacts withheld, synthetic patients. See step 2.
 - **Free instances sleep after ~15 minutes idle** and the first request after that pays a cold start of up to a minute. `/health` exists for exactly this: it does no database work and no auth, so a keep-warm ping is cheap. Whether you ping it is a tradeoff with the free tier's spin-down behaviour, not a correctness requirement — the app works either way, it just answers slowly after a gap.
 
 If `env.ts` rejects the config the process exits with the failing field named in the Render log. Read that log before debugging anything else.
@@ -350,7 +388,7 @@ Both legs of the auth surface behave the same as in development on that boot: `4
 
 ### 2 — The database: do not re-seed it
 
-The deployed API points at the **same Atlas cluster and the same `doctor_tracker` database** that local development uses, so the register is already populated — 45 doctors, 600 patients, one admin user. There is nothing to migrate and nothing to seed.
+The deployed API points at the **same Atlas cluster and the same `doctor_tracker` database** that local development uses, so the register is already populated — 72 directory-sourced doctors, 600 synthetic patients, one admin user. There is nothing to migrate and nothing to seed.
 
 `npm run seed` **drops the database before reseeding it.** Against the deployed URI that is not a reset, it is a wipe of everything the portal is showing. Only reach for it if you have deliberately pointed the service at a different database name, and then pass the seed knobs explicitly:
 
@@ -358,7 +396,7 @@ The deployed API points at the **same Atlas cluster and the same `doctor_tracker
 MONGO_URI="mongodb+srv://…/a_different_database?…" npm run seed
 ```
 
-Network Access on this cluster is already open to `0.0.0.0/0` (comment `Render + Vercel`) because Render's free tier has dynamic egress IPs and no single address can be allowlisted. That is the pragmatic free-tier choice, not a recommendation: the database user's credentials are then the only gate, and the data in it is synthetic. A paid Render instance with a static outbound IP would allowlist as a `/32` instead.
+Network Access on this cluster is already open to `0.0.0.0/0` (comment `Render + Vercel`) because Render's free tier has dynamic egress IPs and no single address can be allowlisted. That is the pragmatic free-tier choice, not a recommendation: the database user's credentials are then the only gate, and the data in it is a demo register (see ▸ Where the data comes from). A paid Render instance with a static outbound IP would allowlist as a `/32` instead.
 
 The seeded `admin@doctortracker.dev / Admin@1234` is a published credential — it appears in this README and in `.env.example`. Change it in the live database before sharing the link:
 
@@ -420,7 +458,7 @@ Driven end to end in Chromium against the live hosts, not just curl:
 | Cookies | `dt_at` (`path=/`) and `dt_rt` (`path=/api/v1/auth`), both `host=doctor-tracker-web-one.vercel.app`, `httpOnly`, `secure`, `sameSite=Lax`, **no `Domain`** |
 | Through the rewrite | `auth/me` 200 · `doctors?search=nurul&sort=name` 200 (20 rows → 2) · `dashboard/stats` 200 (45 / 600) · unauthenticated `doctors` 401 · `auth/refresh` 200 with a fresh pair · `auth/logout` 200 clearing both |
 | Dashboard | 3 chart surfaces, area path settled at 1076px of a 1110px plot |
-| Mobile 390×844 | login → dashboard, `0px` horizontal overflow |
+| Mobile 390×844 | `0px` horizontal overflow on `/dashboard`, `/doctors` and `/patients` — measured as `documentElement.scrollWidth` against a 390px client width, not eyeballed |
 
 Two notes for whoever re-runs this. The area chart animates by interpolating path geometry, so a screenshot taken too early shows a line that stops mid-year — wait for the width to stop changing, not for it to be non-zero. And the browser console logs `401` for the deliberate unauthenticated probes plus `net::ERR_ABORTED` on superseded RSC prefetches; both are expected and neither is a failed request in the app.
 
@@ -432,5 +470,6 @@ Two notes for whoever re-runs this. The area chart animates by interpolating pat
 - **One admin role.** There is no per-doctor scoping, so `requireRole('admin')` is the whole authorization model — the spec asks for a single-clinic portal.
 - **Deleting a doctor cascades.** The confirm dialog states how many patient records go with it, because that number is real and the action is not reversible.
 - **Previously-visited routes stay in the DOM.** Next 16 keeps the subtrees of routes you have navigated away from mounted with `display: none` — in the production build as well as in development, and identical in both. They are out of the accessibility tree, so it is not a duplicate-heading bug, but any automated assertion against this app must filter by visibility or it will count rows from a table the user cannot see. A fresh document load is unaffected.
-- **The desktop table scrolls horizontally below ~1700px.** Eight columns do not fit a 1440px viewport: the wrapper is `overflow-x-auto`, so the Actions column is reachable, but at 1440 the table overflows by 159px (319px at 1280) and Edit/Delete sit past the right edge until scrolled. Phones are unaffected — they render cards instead of the table. Narrowing `HOSPITAL` and `CONTACT` is the fix; it is listed here rather than hidden.
-- **Seeded data is synthetic.** 45 doctors and 600 patients with Bangladeshi names, districts and BMDC-style registration numbers, generated by `npm run seed`.
+- **The eight-column doctors table fits from 1440px up and scrolls below that.** `DOCTOR` and `HOSPITAL` carry a `max-w` cap so their `truncate` cells do the shrinking; an uncapped auto-layout table sizes those two columns to their longest content and pushes the remaining six past the right edge. Measured: 1150px of content box holds 1150px of table at 1440, and 990px at 1280 does not hold the 1122px the table needs, so the wrapper's `overflow-x-auto` earns its keep there. Phones are a different layout, not a scrolled one.
+- **Cards wrap where the table truncates.** Below `md` the header row is hidden and each row renders as a card. A card needs `min-w-0` on its grid items *and* wrapping text: `min-width: 0` permits shrinking under a definite size but does not reduce the min-content an auto-layout table measures, so a `nowrap` degree list still set the row's floor at 450px and the card scrolled sideways inside a 390px viewport.
+- **The doctor half of the data is real and the patient half is not.** 72 doctors are copied from public directories with their contacts withheld; 600 patients are generated, because patient records are not lawfully obtainable. [Where the data comes from](#where-the-data-comes-from) is the full accounting, including the one estimated field.
