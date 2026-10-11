@@ -387,7 +387,10 @@ Doctor Tracker API → http://localhost:5001/api/v1 (production)
 
 Set-Cookie: dt_at=…; Max-Age=900;     Path=/;             HttpOnly; Secure; SameSite=Lax
 Set-Cookie: dt_rt=…; Max-Age=604800;  Path=/api/v1/auth;  HttpOnly; Secure; SameSite=Lax
+Set-Cookie: dt_s=1;   Max-Age=604800; Path=/;             HttpOnly; Secure; SameSite=Lax
 ```
+
+`dt_s` is not a credential — the value is literally `1`. It exists because `dt_rt` is path-scoped to `/api/v1/auth` and so never reaches a navigation to `/dashboard`, which left the route gate blind as soon as the 15-minute access cookie aged out; the reasoning is written up under [Frontend layout](#frontend-layout). The three lines above are the live service's response to `POST /api/v1/auth/login`.
 
 (The port in that run is 5001 because this sandbox refuses to bind 1000; Render supplies `PORT` and the app binds whatever it is given. Everything else is verbatim.)
 
@@ -400,7 +403,9 @@ Both legs of the auth surface behave the same as in development on that boot: `4
 
 The deployed API points at the **same Atlas cluster and the same `doctor_tracker` database** that local development uses, so the register is already populated — 72 directory-sourced doctors, 600 synthetic patients, one admin user. There is nothing to migrate and nothing to seed.
 
-`npm run seed` **drops the database before reseeding it.** Against the deployed URI that is not a reset, it is a wipe of everything the portal is showing. Only reach for it if you have deliberately pointed the service at a different database name, and then pass the seed knobs explicitly:
+Those are the seeded counts, not a permanent state: this is a live CRUD portal and deleting a doctor cascades to their patients, so the register you see when a reviewer has been through it will be smaller. As of the last verification pass it was 71 doctors / 585 patients. Nothing is wrong — that is the delete path working.
+
+`npm run seed` **drops three collections before reseeding them.** Against the deployed URI that is not a reset, it is a wipe of everything the portal is showing — so under `NODE_ENV=production` the script now refuses to run unless `SEED_CONFIRM_DB` exactly equals the connected database name, and it says which database it was about to erase. Only reach for it if you have deliberately pointed the service at a different database name, and then pass the seed knobs explicitly:
 
 ```bash
 MONGO_URI="mongodb+srv://…/a_different_database?…" npm run seed
@@ -452,7 +457,7 @@ Consequences to keep in mind:
 |---|---|
 | `GET https://<render>/health` | `{"success":true,"data":{"status":"ok","environment":"production",…}}` |
 | `GET https://<vercel>/login` | The portal sign-in screen, no console errors |
-| `POST https://<vercel>/api/v1/auth/login` | `200`, and **two `Set-Cookie` headers** (`dt_at`, `dt_rt`) flagged `HttpOnly; Secure; SameSite=Lax`, host-only — **no `Domain=` attribute**. If `Domain` appears, the cookies will not attach to the Vercel origin and login loops. |
+| `POST https://<vercel>/api/v1/auth/login` | `200`, and **three `Set-Cookie` headers** (`dt_at`, `dt_rt`, `dt_s`) flagged `HttpOnly; Secure; SameSite=Lax`, host-only — **no `Domain=` attribute**. If `Domain` appears, the cookies will not attach to the Vercel origin and login loops. |
 | Wrong password | `401` with the same message as an unknown account |
 | Dashboard, doctors, patients | Data renders; charts animate in; reload a filtered URL and the filters come back |
 
@@ -468,8 +473,9 @@ Driven end to end in Chromium against the live hosts, not just curl:
 | Portal | `https://doctor-tracker-web-one.vercel.app` |
 | Gate | `/` → `307 /login` for an anonymous visitor; `/doctors` after logout → `/login` |
 | Failed login | error shown, **zero cookies issued** |
-| Cookies | `dt_at` (`path=/`) and `dt_rt` (`path=/api/v1/auth`), both `host=doctor-tracker-web-one.vercel.app`, `httpOnly`, `secure`, `sameSite=Lax`, **no `Domain`** |
-| Through the rewrite | `auth/me` 200 · `doctors?search=nurul&sort=name` 200 (20 rows → 2) · `dashboard/stats` 200 (45 / 600) · unauthenticated `doctors` 401 · `auth/refresh` 200 with a fresh pair · `auth/logout` 200 clearing both |
+| Cookies | `dt_at` (`path=/`), `dt_rt` (`path=/api/v1/auth`) and `dt_s` (`path=/`, value `1`), all `host=doctor-tracker-web-one.vercel.app`, `httpOnly`, `secure`, `sameSite=Lax`, **no `Domain`** |
+| Through the rewrite | `auth/me` 200 · `doctors?search=nurul` 200 (1 row) · reload of that URL 200 with the filter intact · `dashboard/stats` 200 · `patients` 200 · unauthenticated `doctors` 401 · `auth/refresh` 200 with a fresh trio · `auth/logout` 200 clearing all three |
+| Session survival | `GET /dashboard` handed `dt_rt` only → `307 /login` (the old gate's exact failure); handed `dt_s` → `200`. Against a local production build with a 30-second access token: a cold navigation after expiry logged `401 /auth/me`, `200 POST /auth/refresh`, `200 /auth/me`, `200 /dashboard/stats` and stayed on `/dashboard` |
 | Dashboard | 3 chart surfaces, area path settled at 1076px of a 1110px plot |
 | Mobile 390×844 | `0px` horizontal overflow on `/dashboard`, `/doctors` and `/patients` — measured as `documentElement.scrollWidth` against a 390px client width, not eyeballed |
 
@@ -479,6 +485,7 @@ Two notes for whoever re-runs this. The area chart animates by interpolating pat
 
 ## Notes and limits
 
+- **Logout revokes the session, not the token already in the browser.** `tokenVersion` bumps on logout, so every outstanding refresh token stops validating immediately — but `requireAuth` verifies signature and expiry only, with no session lookup per request, so an access token that was already issued stays valid for the remainder of its 15 minutes. Revocation is bounded, not instant. Closing the window means a database read on every protected request, which this portal does not otherwise pay.
 - **The route gate is coarse by design.** `proxy.ts` tests cookie *presence*, not validity; the API is the enforcement point and no data is reachable through the gate.
 - **One admin role.** There is no per-doctor scoping, so `requireRole('admin')` is the whole authorization model — the spec asks for a single-clinic portal.
 - **Deleting a doctor cascades.** The confirm dialog states how many patient records go with it, because that number is real and the action is not reversible.
