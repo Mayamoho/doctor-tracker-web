@@ -2,6 +2,8 @@
 
 A full-stack clinic register: a Next.js 16 admin portal in front of a Node/Express 5 REST API on MongoDB Atlas. Doctors and their patients are CRUD-manageable, searchable, filterable, sortable and paginable, with an aggregated dashboard behind a JWT session.
 
+**Live:** https://doctor-tracker-web-one.vercel.app — portal on Vercel, API on Render, data on Atlas. Sign in with the demo credentials supplied with this submission, **not** the seeded pair printed in the Setup Guide below: those are the development defaults, and the deployed database was seeded from the same script. Rotate that password before handing the link to anyone.
+
 ---
 
 ## Description
@@ -404,6 +406,23 @@ Consequences to keep in mind:
 | Dashboard, doctors, patients | Data renders; charts animate in; reload a filtered URL and the filters come back |
 
 Paste the Vercel URL and both repository links into the submission.
+
+### 6 — What this deployment actually did
+
+Driven end to end in Chromium against the live hosts, not just curl:
+
+| | |
+|---|---|
+| API | `https://doctor-tracker-api-7sr6.onrender.com` — build `npm ci --include=dev && npm run build`, `singapore`, free |
+| Portal | `https://doctor-tracker-web-one.vercel.app` |
+| Gate | `/` → `307 /login` for an anonymous visitor; `/doctors` after logout → `/login` |
+| Failed login | error shown, **zero cookies issued** |
+| Cookies | `dt_at` (`path=/`) and `dt_rt` (`path=/api/v1/auth`), both `host=doctor-tracker-web-one.vercel.app`, `httpOnly`, `secure`, `sameSite=Lax`, **no `Domain`** |
+| Through the rewrite | `auth/me` 200 · `doctors?search=nurul&sort=name` 200 (20 rows → 2) · `dashboard/stats` 200 (45 / 600) · unauthenticated `doctors` 401 · `auth/refresh` 200 with a fresh pair · `auth/logout` 200 clearing both |
+| Dashboard | 3 chart surfaces, area path settled at 1076px of a 1110px plot |
+| Mobile 390×844 | login → dashboard, `0px` horizontal overflow |
+
+Two notes for whoever re-runs this. The area chart animates by interpolating path geometry, so a screenshot taken too early shows a line that stops mid-year — wait for the width to stop changing, not for it to be non-zero. And the browser console logs `401` for the deliberate unauthenticated probes plus `net::ERR_ABORTED` on superseded RSC prefetches; both are expected and neither is a failed request in the app.
 
 ---
 
