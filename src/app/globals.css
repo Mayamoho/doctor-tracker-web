@@ -5,52 +5,60 @@
  * reference `--color-*` names, so a dark mode is this block plus nothing else.
  */
 :root {
-  --canvas: #f6f7fb;
+  --canvas: #f4f5f6;
   --surface: #ffffff;
-  --surface-muted: #f9fafc;
-  --line: #e4e7ee;
-  --line-strong: #cfd5e0;
-  --ink: #101728;
-  --ink-muted: #5b6678;
-  --ink-faint: #8a94a6;
-  --brand: #2f5fe0;
-  --brand-hover: #244fc0;
-  --brand-soft: #eaf0ff;
-  --danger: #c8334b;
-  --danger-soft: #fdeaee;
-  --warning: #a2650b;
-  --warning-soft: #fdf3e0;
-  --success: #1c7a53;
-  --success-soft: #e6f6ee;
-  --info: #2a6c8f;
-  --info-soft: #e7f2f8;
-  --ring: rgb(47 95 224 / 0.45);
-  --shadow-card: 0 1px 2px rgb(16 23 40 / 0.04), 0 8px 24px -12px rgb(16 23 40 / 0.12);
+  --surface-muted: #f8f9fa;
+  --line: #dfe3e8;
+  --line-strong: #c8cfd8;
+  --ink: #22272e;
+  --ink-muted: #5f6873;
+  --ink-faint: #8d959f;
+  --brand: #b45309;
+  --brand-hover: #93400a;
+  --brand-soft: #fdf3e6;
+  /* Text on a filled accent surface — white would be 1.9:1 on the dark-mode amber. */
+  --on-accent: #ffffff;
+  --danger: #9b3634;
+  --danger-soft: #f8ebea;
+  --warning: #8a6a1c;
+  --warning-soft: #f6f0dd;
+  --success: #3f6b57;
+  --success-soft: #e9f1ec;
+  --info: #4c6a78;
+  --info-soft: #eaf0f2;
+  --ring: rgb(180 83 9 / 0.42);
+  --shadow-card: 0 1px 2px rgb(34 39 46 / 0.05), 0 8px 24px -12px rgb(34 39 46 / 0.14);
+  /* Login showcase panel: stays dark in both schemes. */
+  --panel: #22272e;
+  --panel-ink: #eef1f4;
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --canvas: #0c1017;
-    --surface: #141a24;
-    --surface-muted: #1a212c;
-    --line: #252e3b;
-    --line-strong: #33404f;
-    --ink: #e8ecf3;
-    --ink-muted: #a3aec0;
-    --ink-faint: #75829a;
-    --brand: #6d94f5;
-    --brand-hover: #82a5f8;
-    --brand-soft: #1b2540;
-    --danger: #f0788c;
-    --danger-soft: #2c1a20;
-    --warning: #e0b062;
-    --warning-soft: #2b2317;
-    --success: #5cc798;
-    --success-soft: #14291f;
-    --info: #74b6d8;
-    --info-soft: #142630;
-    --ring: rgb(109 148 245 / 0.5);
+    --canvas: #0e1114;
+    --surface: #16191d;
+    --surface-muted: #1d2126;
+    --line: #272c32;
+    --line-strong: #384049;
+    --ink: #e6e9ec;
+    --ink-muted: #a0a8b1;
+    --ink-faint: #7b838d;
+    --brand: #e6a95f;
+    --brand-hover: #f0bd82;
+    --brand-soft: #2a2015;
+    --on-accent: #1d1206;
+    --danger: #e08b84;
+    --danger-soft: #2a1a19;
+    --warning: #d8b96a;
+    --warning-soft: #28231a;
+    --success: #7fbba0;
+    --success-soft: #16261f;
+    --info: #93b0bd;
+    --info-soft: #182429;
+    --ring: rgb(230 169 95 / 0.5);
+    --panel: #1f242b;
+    --panel-ink: #dfe4ea;
     --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -12px rgb(0 0 0 / 0.5);
     color-scheme: dark;
   }
@@ -68,6 +76,7 @@
   --color-brand: var(--brand);
   --color-brand-hover: var(--brand-hover);
   --color-brand-soft: var(--brand-soft);
+  --color-on-accent: var(--on-accent);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
   --color-warning: var(--warning);
@@ -76,6 +85,8 @@
   --color-success-soft: var(--success-soft);
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
+  --color-panel: var(--panel);
+  --color-panel-ink: var(--panel-ink);
 
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
@@ -160,7 +171,7 @@
 
   .field-invalid:focus {
     border-color: var(--danger);
-    box-shadow: 0 0 0 3px rgb(200 51 75 / 0.35);
+    box-shadow: 0 0 0 3px rgb(155 54 52 / 0.32);
   }
 }
 

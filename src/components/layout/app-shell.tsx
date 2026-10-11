@@ -52,7 +52,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
 function Brand() {
   return (
     <Link href="/dashboard" className="flex items-center gap-2.5 px-1 py-1">
-      <span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-brand text-white">
+      <span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-brand text-on-accent">
         <Activity size={16} strokeWidth={2.4} />
       </span>
       <span className="flex flex-col leading-tight">

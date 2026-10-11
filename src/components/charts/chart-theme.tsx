@@ -1,10 +1,14 @@
 /**
  * Chart colours are fixed rather than theme tokens: Recharts writes `fill` and
  * `stroke` as SVG presentation attributes, and `var(…)` does not resolve there.
- * These are mid-lightness enough to read on both surfaces, and anything that can
- * take `currentColor` (axes, grid) inherits the theme instead.
+ * Ten steps so the case-mix pie never wraps onto a repeated colour, each kept
+ * mid-lightness to read on both surfaces. Anything that can take
+ * `currentColor` (axes, grid) inherits the theme instead.
  */
-export const SERIES = ['#4f6ef7', '#2aa5a0', '#e0873c', '#c1557f', '#7a5bd6', '#3f9d5a', '#b8892b'];
+export const SERIES = [
+  '#c9761c', '#4b5563', '#e0a456', '#76838f', '#a06b4c',
+  '#b3bec9', '#3a4450', '#8c7a5c', '#5f7a72', '#a89a8c',
+];
 
 export const AXIS = {
   tick: { fill: 'currentColor', fontSize: 11 },

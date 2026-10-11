@@ -80,7 +80,7 @@ export function Pagination({ meta, onPage, className = '' }: PaginationProps) {
               className={[
                 'h-8 min-w-8 rounded-md px-2 text-[13px] font-medium transition-colors',
                 entry === page
-                  ? 'bg-brand text-white'
+                  ? 'bg-brand text-on-accent'
                   : 'text-ink-muted hover:bg-surface-muted hover:text-ink',
               ].join(' ')}
             >

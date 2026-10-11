@@ -124,7 +124,7 @@ export function DoctorDetailView({ doctorId }: { doctorId: string }) {
         <>
           <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
             <div className="flex min-w-0 items-start gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] bg-brand text-sm font-semibold text-white">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] bg-brand text-sm font-semibold text-on-accent">
                 {initials(doctor.name)}
               </span>
               <div className="min-w-0">
