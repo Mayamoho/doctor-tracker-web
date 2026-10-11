@@ -20,6 +20,7 @@ import { useDeleteDoctor, useDoctor, useDoctorPatients, useRemovePatientFromDoct
 import { useFilterOptions } from '@/lib/hooks/use-dashboard';
 import { useListState } from '@/lib/hooks/use-list-state';
 import { PATIENT_EXTRAS, toPatientParams } from '@/lib/list-state';
+import { isWithheldContact } from '@/lib/validation';
 import { formatDate, initials } from '@/lib/format';
 
 const SORTS = [
@@ -37,6 +38,36 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
       <dt className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{label}</dt>
       <dd className="truncate text-[13px] text-ink">{children}</dd>
     </div>
+  );
+}
+
+/**
+ * Directory-sourced doctors carry `not published` instead of a contact: the numbers
+ * are real people's and were deliberately not copied. Rendering that string inside a
+ * `tel:` link would offer to dial it, so only a value that looks like a contact gets
+ * an href.
+ */
+function Contact({
+  value,
+  hrefPrefix,
+  mono,
+  truncate,
+}: {
+  value: string;
+  hrefPrefix: string;
+  mono?: boolean;
+  truncate?: boolean;
+}) {
+  const linkable = !isWithheldContact(value);
+  const className = [mono && 'font-mono', truncate && 'truncate', linkable && 'hover:underline']
+    .filter(Boolean)
+    .join(' ');
+
+  if (!linkable) return <span className="text-ink-faint">Not published</span>;
+  return (
+    <a href={`${hrefPrefix}${value}`} className={className}>
+      {value}
+    </a>
   );
 }
 
@@ -163,14 +194,10 @@ export function DoctorDetailView({ doctorId }: { doctorId: string }) {
               <span className="font-mono">{doctor.bmdcRegistration}</span>
             </Fact>
             <Fact label="Phone">
-              <a href={`tel:${doctor.phone}`} className="font-mono hover:underline">
-                {doctor.phone}
-              </a>
+              <Contact value={doctor.phone} hrefPrefix="tel:" mono />
             </Fact>
             <Fact label="Email">
-              <a href={`mailto:${doctor.email}`} className="truncate hover:underline">
-                {doctor.email}
-              </a>
+              <Contact value={doctor.email} hrefPrefix="mailto:" truncate />
             </Fact>
             <Fact label="Added">{formatDate(doctor.createdAt)}</Fact>
           </dl>

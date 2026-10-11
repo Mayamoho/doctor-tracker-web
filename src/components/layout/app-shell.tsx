@@ -109,12 +109,17 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex h-full flex-col gap-5 p-4">
       <Brand />
       <NavList onNavigate={() => setDrawerOpen(false)} />
-      <div className="mt-auto">
+      <div className="mt-auto flex flex-col gap-3">
         {user ? (
           <UserPanel name={user.name} email={user.email} onLogout={logout} pending={loggingOut} />
         ) : (
           <BootUser />
         )}
+        <p className="text-[10px] leading-relaxed text-ink-faint">
+          <span className="font-medium text-ink-muted">Demonstration data.</span> Doctor rows are real,
+          publicly listed BMDC registrants with their contacts withheld. Patient rows are synthetic and
+          describe no one’s medical history.
+        </p>
       </div>
     </div>
   );

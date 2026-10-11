@@ -12,6 +12,17 @@ export const PHONE_RULES = {
 };
 
 const phone = z.string().trim().regex(PHONE_RULES.pattern, PHONE_RULES.message);
+const email = z.email('Enter a valid email').max(160);
+
+/**
+ * Directory-sourced doctors carry no published contact — the seed stores this marker
+ * rather than inventing a number against a real person's name. It has to be matched
+ * exactly: an email address never starts with `+` or a digit, so a looser "does not
+ * look like a phone" test blanks out every real email address in the edit form.
+ */
+export const WITHHELD_CONTACT = 'not published';
+export const isWithheldContact = (value: string) =>
+  value.trim().toLowerCase() === WITHHELD_CONTACT;
 const bmdc = z
   .string()
   .trim()
@@ -19,6 +30,7 @@ const bmdc = z
   .regex(/^A-\d{4,6}$|^\d{4,6}$/, 'BMDC number must look like A-12345 or 12345');
 
 export const GENDERS = ['male', 'female', 'other'] as const;
+
 export const SEVERITIES = ['mild', 'moderate', 'severe'] as const;
 export const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
 
@@ -28,7 +40,7 @@ export const doctorFormSchema = z.object({
   hospital: z.string().trim().min(2, 'Hospital is required').max(120),
   district: z.string().trim().min(2, 'District is required').max(60),
   phone,
-  email: z.email('Enter a valid email').max(160),
+  email,
   degrees: z.string().trim().min(3, 'Degrees are required').max(160),
   bmdcRegistration: bmdc,
   experienceYears: z.coerce
@@ -36,6 +48,17 @@ export const doctorFormSchema = z.object({
     .int('Experience must be a whole number')
     .min(0, 'Cannot be negative')
     .max(60, 'Cannot exceed 60 years'),
+});
+
+/**
+ * Editing lets a contact stay blank: the record already has nothing to show, and
+ * forcing an admin to invent a number just to correct a spelling is how false data
+ * gets into a register. A blank is stripped from the PUT body rather than sent, so
+ * the server's partial update leaves the field untouched.
+ */
+export const doctorEditFormSchema = doctorFormSchema.extend({
+  phone: phone.or(z.literal('')),
+  email: email.or(z.literal('')),
 });
 
 export const patientFormSchema = z.object({

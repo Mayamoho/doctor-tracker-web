@@ -9,7 +9,14 @@ import { ApiError } from '@/lib/api/client';
 import type { Doctor } from '@/lib/api/types';
 import { useSaveDoctor } from '@/lib/hooks/use-doctors';
 import { useFilterOptions } from '@/lib/hooks/use-dashboard';
-import { PHONE_RULES, doctorFormSchema, issueMap } from '@/lib/validation';
+import {
+  PHONE_RULES,
+  doctorEditFormSchema,
+  doctorFormSchema,
+  isWithheldContact,
+  type DoctorFormValues,
+  issueMap,
+} from '@/lib/validation';
 
 const BLANK = {
   name: '',
@@ -32,8 +39,10 @@ function initialValues(doctor: Doctor | null): Values {
     specialization: doctor.specialization,
     hospital: doctor.hospital,
     district: doctor.district,
-    phone: doctor.phone,
-    email: doctor.email,
+    // A withheld contact edits as blank, not as the marker string — putting "not
+    // published" in the field would fail the phone regex on any unrelated edit.
+    phone: isWithheldContact(doctor.phone) ? '' : doctor.phone,
+    email: isWithheldContact(doctor.email) ? '' : doctor.email,
     degrees: doctor.degrees,
     bmdcRegistration: doctor.bmdcRegistration,
     experienceYears: String(doctor.experienceYears),
@@ -118,14 +127,20 @@ export function DoctorForm({ doctor, onClose }: DoctorFormProps) {
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const parsed = doctorFormSchema.safeParse(values);
+    const parsed = (doctor ? doctorEditFormSchema : doctorFormSchema).safeParse(values);
     if (!parsed.success) {
       setErrors(issueMap(parsed.error));
       return;
     }
 
+    // The API's update body is a partial, so an untouched contact is omitted rather
+    // than sent as "" — an empty string would fail the server's phone regex.
+    const payload = Object.fromEntries(
+      Object.entries(parsed.data).filter(([key, value]) => !(key === 'phone' || key === 'email') || value !== ''),
+    );
+
     setErrors({});
-    save.mutate(parsed.data, {
+    save.mutate(payload as DoctorFormValues, {
       onSuccess: () => onClose(),
       // The API answers a rejected body with per-field issues; show them where the
       // user can act on them rather than only in the toast the hook raises.
@@ -141,7 +156,9 @@ export function DoctorForm({ doctor, onClose }: DoctorFormProps) {
       onClose={onClose}
       title={doctor ? 'Edit doctor' : 'Add doctor'}
       description={
-        doctor ? `Updating ${doctor.name}. All fields are required.` : 'Every field is required.'
+        doctor
+          ? `Updating ${doctor.name}. A contact left blank stays unpublished.`
+          : 'Every field is required.'
       }
       size="lg"
       footer={
@@ -218,7 +235,7 @@ export function DoctorForm({ doctor, onClose }: DoctorFormProps) {
           onChange={edit('phone')}
           error={errors.phone}
           hint={PHONE_RULES.message}
-          placeholder="01712345678"
+          placeholder={doctor && !values.phone ? 'Not published — type to add' : '01712345678'}
         />
         <TextInput
           label="Email"
@@ -227,7 +244,7 @@ export function DoctorForm({ doctor, onClose }: DoctorFormProps) {
           value={values.email}
           onChange={edit('email')}
           error={errors.email}
-          placeholder="reca.islam@hospital.bd"
+          placeholder={doctor && !values.email ? 'Not published — type to add' : 'reca.islam@hospital.bd'}
           autoComplete="off"
         />
         <TextInput

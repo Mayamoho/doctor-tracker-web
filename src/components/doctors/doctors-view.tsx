@@ -18,6 +18,7 @@ import { useDeleteDoctor, useDoctors } from '@/lib/hooks/use-doctors';
 import { useFilterOptions } from '@/lib/hooks/use-dashboard';
 import { useListState } from '@/lib/hooks/use-list-state';
 import { DOCTOR_EXTRAS, toDoctorParams } from '@/lib/list-state';
+import { isWithheldContact } from '@/lib/validation';
 import { formatDate } from '@/lib/format';
 
 const SORTS = [
@@ -53,7 +54,7 @@ export function DoctorsView() {
     {
       key: 'name',
       header: 'Doctor',
-      width: 'w-[24%]',
+      width: 'max-w-[15rem]',
       cell: (row) => (
         <div className="flex min-w-0 flex-col">
           <span className="truncate font-medium text-ink">{row.name}</span>
@@ -69,6 +70,7 @@ export function DoctorsView() {
     {
       key: 'hospital',
       header: 'Hospital',
+      width: 'max-w-[15rem]',
       hideBelow: 'lg',
       cell: (row) => (
         <div className="flex min-w-0 flex-col">
@@ -81,12 +83,15 @@ export function DoctorsView() {
       key: 'contact',
       header: 'Contact',
       hideBelow: 'lg',
-      cell: (row) => (
-        <div className="flex min-w-0 flex-col">
-          <span className="truncate font-mono text-xs">{row.phone}</span>
-          <span className="truncate text-xs text-ink-faint">{row.email}</span>
-        </div>
-      ),
+      cell: (row) =>
+        isWithheldContact(row.phone) && isWithheldContact(row.email) ? (
+          <span className="text-ink-faint">—</span>
+        ) : (
+          <div className="flex min-w-0 flex-col">
+            <span className="truncate font-mono text-xs">{row.phone}</span>
+            <span className="truncate text-xs text-ink-faint">{row.email}</span>
+          </div>
+        ),
     },
     {
       key: 'experienceYears',

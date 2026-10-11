@@ -52,10 +52,12 @@ export async function one<T>(request: Promise<Envelope<T>>): Promise<T> {
 }
 
 /**
- * Concurrent 401s collapse into one refresh call. Without this, a dashboard that
- * fires four queries with an expired access token makes four refresh requests,
- * and because each one rotates the refresh cookie the later three present a token
- * the server has already replaced.
+ * Concurrent 401s collapse into one refresh call. A dashboard that fires four
+ * queries with an expired access token would otherwise make four refresh requests,
+ * each doing a user lookup and each overwriting the same two cookies. The server
+ * does not revoke on refresh (see `authService.refresh`), so this is wasted work
+ * rather than a race — but four identical writes to the cookie jar per expiry is
+ * still worth deduplicating.
  */
 let refreshInFlight: Promise<boolean> | null = null;
 
