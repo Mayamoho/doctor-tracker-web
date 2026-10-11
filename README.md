@@ -2,7 +2,15 @@
 
 A full-stack clinic register: a Next.js 16 admin portal in front of a Node/Express 5 REST API on MongoDB Atlas. Doctors and their patients are CRUD-manageable, searchable, filterable, sortable and paginable, with an aggregated dashboard behind a JWT session.
 
-**Live:** https://doctor-tracker-web-one.vercel.app — portal on Vercel, API on Render, data on Atlas. Sign in with the demo credentials supplied with this submission, **not** the seeded pair printed in the Setup Guide below: those are the development defaults, and the deployed database was seeded from the same script. Rotate that password before handing the link to anyone.
+**Live:** https://doctor-tracker-web-one.vercel.app — portal on Vercel, API on Render, data on Atlas.
+
+Sign in with the reviewer account, which exists only in the deployed database:
+
+```
+reviewer@doctortracker.dev / Review-Orchard-Ledger-644
+```
+
+It carries the `admin` role because every resource route is `requireRole('admin')` — a lesser role would sign in and then 403 on the whole portal. That means it can create, edit and delete, so if rows go missing while you are poking at it, that is the write path working rather than the app breaking: `npm run seed` in the API repo restores the register. The `admin@doctortracker.dev / Admin@1234` pair printed further down is the seeded development default and is **not** valid against this database — it is in a public repository, which is exactly why it was rotated out.
 
 ---
 
@@ -72,7 +80,7 @@ http://localhost:3000/login
 admin@doctortracker.dev / Admin@1234
 ```
 
-Those are the seeded development credentials from `.env.example`, and they exist only in the demo database.
+Those are the seeded development credentials from `.env.example`, valid only against a database you seed yourself. The deployed portal answers to the reviewer account at the top of this file instead, because these values are published here and in `.env.example`.
 
 ### Why `localhost` and not `127.0.0.1` in development
 
@@ -398,12 +406,15 @@ MONGO_URI="mongodb+srv://…/a_different_database?…" npm run seed
 
 Network Access on this cluster is already open to `0.0.0.0/0` (comment `Render + Vercel`) because Render's free tier has dynamic egress IPs and no single address can be allowlisted. That is the pragmatic free-tier choice, not a recommendation: the database user's credentials are then the only gate, and the data in it is a demo register (see ▸ Where the data comes from). A paid Render instance with a static outbound IP would allowlist as a `/32` instead.
 
-The seeded `admin@doctortracker.dev / Admin@1234` is a published credential — it appears in this README and in `.env.example`. Change it in the live database before sharing the link:
+The seeded `admin@doctortracker.dev / Admin@1234` is a published credential — it appears in this README and in `.env.example` — so it does not work against the deployed database. Its `passwordHash` was replaced in place and a separate `reviewer@doctortracker.dev` account was added for review, both without reseeding:
 
-```js
-// Atlas ▸ Data Browse ▸ doctor_tracker  users ▸ update the admin doc's password
-// with a fresh bcrypt hash, or re-run the seed against a throwaway database.
+```bash
+# Rotates the password on the account named by ADMIN_EMAIL and bumps tokenVersion,
+# which invalidates every refresh token already issued. No rows are touched.
+ADMIN_PASSWORD='<fresh>' npm run rotate:admin
 ```
+
+Two things follow from that, and they are worth stating rather than glossing. The database user's own password is still the one from setup: the connection user is `atlasAdmin` over the data but holds no user-administration rights, so `updateUser` on it returns `Unauthorized` and the rotation is a dashboard action — which matters specifically because Network Access is `0.0.0.0/0`. And the reviewer credential at the top of this file is published in a public repository, so the demo register is writable by anyone who reads it. Both are trade-offs of shipping a reviewable demo on free tiers, not the shape a real deployment would take.
 
 ### 3 — Vercel (web)
 
